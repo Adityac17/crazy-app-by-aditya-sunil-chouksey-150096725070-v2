@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Secret Agent Hacker Terminal</title>
+<style>
+  :root { --g:#39ff14; --g2:#0f8a0a; --bg:#020a02; --red:#ff2e63; --cy:#00f0ff; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--g); font-family:"Courier New",monospace; }
+  canvas#rain { position:fixed; inset:0; width:100%; height:100%; opacity:.35; z-index:0; }
+  header { position:relative; z-index:2; padding:12px 16px; border-bottom:1px solid var(--g2);
+    background:rgba(2,10,2,.85); text-shadow:0 0 8px var(--g); display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+  header h1 { margin:0; font-size:1.1rem; }
+  header button { background:none; border:1px solid var(--g); color:var(--g); padding:4px 10px; font:inherit; cursor:pointer; }
+  main { position:relative; z-index:2; display:grid; grid-template-columns:2fr 1fr; gap:12px; padding:12px; height:calc(100% - 56px); }
+  @media (max-width:760px){ main{ grid-template-columns:1fr; height:auto; } }
+  .panel { background:rgba(2,12,2,.88); border:1px solid var(--g2); box-shadow:0 0 14px rgba(57,255,20,.15); padding:10px; min-height:0; }
+  #term { display:flex; flex-direction:column; height:100%; min-height:380px; }
+  #out { flex:1; overflow-y:auto; white-space:pre-wrap; line-height:1.4; font-size:.92rem; }
+  #out .err { color:var(--red); } #out .info { color:var(--cy); }
+  #line { display:flex; gap:8px; border-top:1px solid var(--g2); padding-top:8px; margin-top:8px; }
+  #line input { flex:1; background:none; border:none; outline:none; color:var(--g); font:inherit; caret-color:var(--g); }
+  #side { display:flex; flex-direction:column; gap:12px; }
+  h2 { margin:0 0 8px; font-size:.95rem; }
+  .bar { height:14px; border:1px solid var(--g); margin:6px 0; }
+  .bar i { display:block; height:100%; width:0; background:var(--g); box-shadow:0 0 8px var(--g); }
+  .btns { display:flex; flex-wrap:wrap; gap:6px; }
+  .btns button { background:none; border:1px solid var(--g); color:var(--g); padding:6px 10px; font:inherit; cursor:pointer; }
+  .btns button:hover, header button:hover { background:var(--g); color:#000; }
+  button:focus-visible, input:focus-visible { outline:2px solid var(--cy); outline-offset:2px; }
+  #cipher { font-size:1.15rem; letter-spacing:.12em; word-break:break-all; color:var(--cy); }
+  .shake { animation:shake .4s; }
+  @keyframes shake { 25%{transform:translate(-5px,2px)} 50%{transform:translate(5px,-2px)} 75%{transform:translate(-3px,0)} }
+  @media (prefers-reduced-motion:reduce){ .shake{animation:none} }
+</style>
+</head>
+<body>
+<canvas id="rain" aria-hidden="true"></canvas>
+
+<header>
+  <h1>Created by Student #150096725070</h1>
+  <button id="mute" aria-pressed="false">Sound: on</button>
+</header>
+
+<main>
+  <section class="panel" id="term" aria-label="Terminal">
+    <div id="out" aria-live="polite"></div>
+    <form id="line" autocomplete="off">
+      <span>agent@ghost:~$</span>
+      <input id="cmd" aria-label="Command" autofocus spellcheck="false">
+    </form>
+  </section>
+
+  <aside id="side">
+    <div class="panel">
+      <h2>Hack tools</h2>
+      <div class="btns">
+        <button data-tool="scan">Scan network</button>
+        <button data-tool="crack">Crack password</button>
+        <button data-tool="satellite">Hijack satellite</button>
+      </div>
+      <div class="bar"><i id="bar"></i></div>
+      <div id="barLabel">Idle</div>
+    </div>
+    <div class="panel">
+      <h2>Cipher challenge</h2>
+      <div id="cipher"></div>
+      <p>Each letter is shifted by a secret number. Type <b>solve WORD</b> in the terminal, or <b>hint</b> for help.</p>
+      <div>Score: <span id="score">0</span></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+/* ---------- Matrix rain ---------- */
+const canvas = document.getElementById('rain');
+const ctx = canvas.getContext('2d');
+let cols, drops;
+const GLYPHS = 'アイウエオカキクケコ0123456789ABCDEF<>{}[]#$%';
+function sizeRain() {
+  canvas.width = innerWidth; canvas.height = innerHeight;
+  cols = Math.floor(canvas.width / 16);
+  drops = Array(cols).fill(0).map(() => Math.random() * -50);
+}
+// ANALOGY: paste your AI's "explain like I'm 10" comment here (Task 3)
+function drawRain() {
+  ctx.fillStyle = 'rgba(2,10,2,.08)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#39ff14';
+  ctx.font = '16px monospace';
+  for (let i = 0; i < cols; i++) {
+    ctx.fillText(GLYPHS[Math.floor(Math.random() * GLYPHS.length)], i * 16, drops[i] * 16);
+    if (drops[i] * 16 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+    drops[i]++;
+  }
+}
+addEventListener('resize', sizeRain);
+sizeRain();
+setInterval(drawRain, 50);
+
+/* ---------- Sound ---------- */
+let audio, muted = false;
+function beep(freq = 440, dur = 0.08, type = 'square') {
+  if (muted) return;
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = type; o.frequency.value = freq; g.gain.value = 0.04;
+    o.connect(g); g.connect(audio.destination);
+    o.start(); o.stop(audio.currentTime + dur);
+  } catch (e) { /* audio blocked until first click */ }
+}
+document.getElementById('mute').onclick = e => {
+  muted = !muted;
+  e.target.textContent = 'Sound: ' + (muted ? 'off' : 'on');
+  e.target.setAttribute('aria-pressed', muted);
+};
+
+/* ---------- Terminal ---------- */
+const out = document.getElementById('out');
+const cmd = document.getElementById('cmd');
+function print(text, cls = '') {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = text;
+  out.appendChild(d);
+  out.scrollTop = out.scrollHeight;
+}
+function typeLines(lines, cls = '', delay = 260) {
+  lines.forEach((l, i) => setTimeout(() => { print(l, cls); beep(700 + i * 40, 0.03); }, i * delay));
+}
+
+/* ---------- Progress bar tools ---------- */
+const bar = document.getElementById('bar'), barLabel = document.getElementById('barLabel');
+let busy = false;
+const TOOLS = {
+  scan:      { label: 'Scanning network', done: ['Found 7 hosts.', 'Host 10.0.0.42 is running an old camera server.'] },
+  crack:     { label: 'Cracking password', done: ['Password found: hunter2 (obviously).', 'Access level: AGENT'] },
+  satellite: { label: 'Hijacking satellite', done: ['Satellite is now showing cat videos.', 'Mission control is confused.'] }
+};
+function runTool(name) {
+  const t = TOOLS[name];
+  if (!t) return print('Unknown tool: ' + name, 'err');
+  if (busy) return print('A tool is already running.', 'err');
+  busy = true;
+  let pct = 0;
+  print('> ' + t.label + '...', 'info');
+  const timer = setInterval(() => {
+    pct = clampPercent(pct + Math.random() * 12);
+    bar.style.width = pct + '%';
+    barLabel.textContent = t.label + ' ' + Math.floor(pct) + '%';
+    beep(300 + pct * 5, 0.03, 'sawtooth');
+    if (pct >= 100) {
+      clearInterval(timer);
+      busy = false;
+      barLabel.textContent = 'Done';
+      t.done.forEach(l => print(l));
+      beep(880, 0.2, 'triangle');
+      document.body.classList.add('shake');
+      setTimeout(() => document.body.classList.remove('shake'), 450);
+    }
+  }, 160);
+}
+document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => runTool(b.dataset.tool));
+
+/* ---------- Cipher mini-game ---------- */
+const WORDS = ['AGENT', 'SECRET', 'MATRIX', 'GHOST', 'CIPHER', 'SHADOW', 'ROCKET'];
+let answer, shift, score = 0;
+function caesar(text, n) {
+  const k = ((n % 26) + 26) % 26;                       // handles negative and large shifts
+  return String(text).toUpperCase().replace(/[A-Z]/g, c =>
+    String.fromCharCode((c.charCodeAt(0) - 65 + k) % 26 + 65));
+}
+function clampPercent(n) { return Math.max(0, Math.min(100, Number(n) || 0)); }
+function newRound() {
+  answer = WORDS[Math.floor(Math.random() * WORDS.length)];
+  shift = 1 + Math.floor(Math.random() * 25);
+  document.getElementById('cipher').textContent = caesar(answer, shift);
+}
+function solve(guess) {
+  if (guess.toUpperCase() === answer) {
+    score += 10;
+    document.getElementById('score').textContent = score;
+    print('ACCESS GRANTED. +10 points. Shift was ' + shift + '.', 'info');
+    beep(988, 0.25, 'triangle');
+    if (score >= 30) print('Hidden file unlocked: "The cake is a lie. Also, the Wi-Fi password is hunter2."', 'info');
+    newRound();
+  } else {
+    print('ACCESS DENIED.', 'err');
+    beep(120, 0.3, 'sawtooth');
+  }
+}
+
+/* ---------- Commands ---------- */
+const COMMANDS = {
+  help:  () => print('Commands: help, scan, crack, satellite, hint, solve WORD, matrix, clear, whoami'),
+  scan:  () => runTool('scan'),
+  crack: () => runTool('crack'),
+  satellite: () => runTool('satellite'),
+  hint:  () => print('Hint: the first letter of the word is ' + answer[0] + '.', 'info'),
+  whoami:() => print('Classified.'),
+  matrix:() => { typeLines(['Wake up...', 'The Matrix has you...', 'Follow the white rabbit.'], 'info'); },
+  clear: () => { out.textContent = ''; }
+};
+document.getElementById('line').addEventListener('submit', e => {
+  e.preventDefault();
+  const raw = cmd.value.trim();
+  cmd.value = '';
+  if (!raw) return;
+  print('agent@ghost:~$ ' + raw);
+  const [name, ...rest] = raw.split(/\s+/);
+  const key = name.toLowerCase();
+  if (key === 'solve') return rest.length ? solve(rest.join('')) : print('Usage: solve WORD', 'err');
+  if (COMMANDS[key]) return COMMANDS[key]();
+  print('Command not found: ' + name + '. Type help.', 'err');
+});
+
+typeLines(['Booting GHOST-OS v1.7...', 'Encrypting connection...', 'Welcome, agent. Type help to begin.'], '', 350);
+newRound();
+
+/* ---------- Task 4: unit tests (replace with your AI's console.assert lines) ---------- */
+console.assert(caesar('ABC', 1) === 'BCD', 'caesar: normal shift failed');
+console.assert(caesar('', 5) === '', 'caesar: empty input failed');
+console.assert(caesar('BCD', -1) === 'ABC', 'caesar: negative shift failed');
+console.assert(clampPercent(150) === 100 && clampPercent(-5) === 0, 'clampPercent: edge cases failed');
+</script>
+</body>
+</html>
